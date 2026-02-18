@@ -14,14 +14,6 @@ def main():
     """
     Builds and executes the command to run the swarm worker.
     """
-    # --- DEBUGGING BLOCK ---
-    print("--- ENVIRONMENT VARIABLES ---")
-    for key, value in sorted(os.environ.items()):
-        if "API" in key.upper() or "LLM" in key.upper() or "GROQ" in key.upper() or "OPENAI" in key.upper() or "XAI" in key.upper():
-            print(f"{key}={value}")
-    print("----------------------------")
-    # --- END DEBUGGING BLOCK ---
-
     repo_root = os.path.dirname(os.path.abspath(__file__))
     agent_path = os.getenv("AGENT_PATH", DEFAULT_AGENT_PATH)
     script_path = os.path.join(repo_root, WORKER_SCRIPT)
@@ -40,24 +32,19 @@ def main():
     # Base command to run the agent in persistent mode
     cmd = [sys.executable, script_path, "--agent", agent_path, "--mode", "persistent"]
 
-    # --- CHANGE IS HERE ---
-    # Explicitly tell the script to use Groq
-    llm_provider = os.getenv("LLM_PROVIDER", "ollama").lower()
-    if llm_provider == "groq":
-        cmd.extend(["--llm-provider", "groq"])
-        print(f"[main.py] Forcing LLM provider to: {llm_provider}")
-    # --- END CHANGE ---
+    # --- Create a custom environment for the subprocess ---
+    # We will explicitly disable the Ollama check to force the LLM fallback.
+    env = os.environ.copy()
+    env["OLLAMA_HOST"] = "disable"  # This non-host string will cause the Ollama check to fail immediately.
+    print(f"[main.py] Forcing Ollama check to fail to trigger LLM fallback.")
 
-    ollama_host = os.getenv("OLLAMA_HOST")
-    if ollama_host:
-        cmd.extend(["--ollama-host", ollama_host])
-        print(f"[main.py] OLLAMA_HOST detected: {ollama_host}")
-
+    # --- Execution ---
     print(f"[main.py] Starting swarm worker...")
     print(f"[main.py] Executing command: {' '.join(cmd)}")
 
     try:
-        result = subprocess.run(cmd, check=True)
+        # Pass the custom 'env' to subprocess.run
+        result = subprocess.run(cmd, check=True, env=env)
         sys.exit(result.returncode)
     except subprocess.CalledProcessError as e:
         print(f"[main.py] Worker script exited with error: {e}")
