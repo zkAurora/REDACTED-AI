@@ -1,21 +1,13 @@
 #!/usr/bin/env python3
 """
 Main entrypoint for deploying the REDACTED AI Swarm worker on Railway.
-
-This script serves as the start command for a single-service deployment.
-It executes the `summon_agent.py` script in persistent mode, using a
-default agent and an optional Ollama host.
-
-Railway will automatically detect and run this file.
 """
 import os
 import subprocess
 import sys
 
 # --- Configuration ---
-# The agent to run by default. Can be overridden with the AGENT_PATH env var.
 DEFAULT_AGENT_PATH = "agents/RedactedIntern.character.json"
-# The Python script that runs the agent
 WORKER_SCRIPT = "python/summon_agent.py"
 
 def main():
@@ -24,7 +16,6 @@ def main():
     """
     # --- DEBUGGING BLOCK ---
     print("--- ENVIRONMENT VARIABLES ---")
-    # Print any variable that might be related to an API key or LLM provider
     for key, value in sorted(os.environ.items()):
         if "API" in key.upper() or "LLM" in key.upper() or "GROQ" in key.upper() or "OPENAI" in key.upper() or "XAI" in key.upper():
             print(f"{key}={value}")
@@ -49,18 +40,22 @@ def main():
     # Base command to run the agent in persistent mode
     cmd = [sys.executable, script_path, "--agent", agent_path, "--mode", "persistent"]
 
-    # Add Ollama host if specified (e.g., in Railway dashboard or railway.toml)
+    # --- CHANGE IS HERE ---
+    # Explicitly tell the script to use Groq
+    llm_provider = os.getenv("LLM_PROVIDER", "ollama").lower()
+    if llm_provider == "groq":
+        cmd.extend(["--llm-provider", "groq"])
+        print(f"[main.py] Forcing LLM provider to: {llm_provider}")
+    # --- END CHANGE ---
+
     ollama_host = os.getenv("OLLAMA_HOST")
     if ollama_host:
         cmd.extend(["--ollama-host", ollama_host])
         print(f"[main.py] OLLAMA_HOST detected: {ollama_host}")
 
-    # --- Execution ---
     print(f"[main.py] Starting swarm worker...")
     print(f"[main.py] Executing command: {' '.join(cmd)}")
 
-    # Use subprocess to run the target script.
-    # This ensures the Railway process is correctly attached.
     try:
         result = subprocess.run(cmd, check=True)
         sys.exit(result.returncode)
@@ -69,7 +64,6 @@ def main():
         sys.exit(e.returncode)
     except FileNotFoundError:
         print(f"[main.py] Error: The script '{script_path}' was not found or is not executable.")
-        print("Please ensure the repository structure is correct.")
         sys.exit(1)
 
 
